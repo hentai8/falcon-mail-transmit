@@ -1,0 +1,9 @@
+{
+  "server_port": "",
+  "lmstfy": {
+    "host": "localhost",
+    "port": 7777,
+    "namespace": "xxxxxxx",
+    "token": "xxxxxxxx"
+  }
+}

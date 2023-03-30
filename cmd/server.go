@@ -2,10 +2,21 @@ package main
 
 import (
 	"fmt"
+	"github.com/bitleak/lmstfy/client"
 	"github.com/labstack/echo/v4"
 	"net/http"
 	"regexp"
 )
+
+type QueueLmstfyClient struct {
+	Client *client.LmstfyClient
+}
+
+type Mail struct {
+	Tos     string `json:"tos"`
+	Subject string `json:"subject"`
+	Content string `json:"content"`
+}
 
 func main() {
 	e := echo.New()
