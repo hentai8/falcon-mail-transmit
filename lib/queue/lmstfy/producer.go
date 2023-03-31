@@ -18,15 +18,28 @@ func Ping() (err error) {
 	return
 }
 
-func ProduceMail(params Mail) (err error) {
-	b := new(bytes.Buffer)
-	err = json.NewEncoder(b).Encode(params)
+func ProduceProblemMail(mail Mail) (err error) {
+	m := new(bytes.Buffer)
+	err = json.NewEncoder(m).Encode(mail)
 	if err != nil {
 		log.Logger.Error("failed to create pool account event")
 		return
 	}
 	c := GetInstance()
-	jobId, err := c.Client.Publish("new_create_pool_account_event", b.Bytes(), 0, 3, 5)
-	log.Logger.Info("lmstfy new create pool account event: ", jobId)
+	jobId, err := c.Client.Publish("new_problem_mail_event", m.Bytes(), 0, 3, 5)
+	log.Logger.Info("lmstfy new problem mail event: ", jobId)
+	return
+}
+
+func ProduceOKMail(mail Mail) (err error) {
+	m := new(bytes.Buffer)
+	err = json.NewEncoder(m).Encode(mail)
+	if err != nil {
+		log.Logger.Error("failed to create pool account event")
+		return
+	}
+	c := GetInstance()
+	jobId, err := c.Client.Publish("new_ok_mail_event", m.Bytes(), 0, 3, 5)
+	log.Logger.Info("lmstfy new ok mail event: ", jobId)
 	return
 }

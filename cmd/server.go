@@ -1,24 +1,50 @@
 package main
 
 import (
+	"falcon-mail-transmit/interval/config"
+	"falcon-mail-transmit/interval/utils"
+	log2 "falcon-mail-transmit/lib/log"
+	"falcon-mail-transmit/lib/queue/lmstfy"
+	"flag"
 	"fmt"
 	"github.com/bitleak/lmstfy/client"
 	"github.com/labstack/echo/v4"
+	"github.com/labstack/gommon/log"
+	rotatelogs "github.com/lestrrat-go/file-rotatelogs"
+	"github.com/sirupsen/logrus"
 	"net/http"
+	"os"
 	"regexp"
+	"strings"
 )
 
 type QueueLmstfyClient struct {
 	Client *client.LmstfyClient
 }
 
-type Mail struct {
-	Tos     string `json:"tos"`
-	Subject string `json:"subject"`
-	Content string `json:"content"`
-}
+var debugMode bool
+var logInfo *rotatelogs.RotateLogs
 
 func main() {
+	parseFlag()
+	cfg, err := config.Load()
+	if err != nil {
+		log.Errorf("failed to load application configuration: %s", err)
+		os.Exit(-1)
+	}
+	logInfo = log2.Init(cfg.LogDir)
+	if debugMode {
+		log2.Logger.SetLevel(logrus.DebugLevel)
+	}
+
+	err = lmstfy.Ping()
+	if err != nil {
+		log2.Logger.Fatal("failed to publish lmstfy test message: ", err)
+		os.Exit(-1)
+	}
+
+	utils.HandlePanic(lmstfy.ConsumeNewProblemMailEvent, lmstfy.ConsumeNewOKMailEvent)
+
 	e := echo.New()
 	e.GET("/", func(c echo.Context) error {
 		return c.String(http.StatusOK, "falcon-mail-transmit ( ￣ー￣)人(^▽^ )")
@@ -73,18 +99,42 @@ func save(c echo.Context) error {
 	con = rCon7c.ReplaceAllString(con, ", 目前故障次数")
 	con = rCon8.ReplaceAllString(con, "\n故障时间")
 
-	fmt.Println(con)
-	req, err := http.NewRequest("GET", "http://127.0.0.1:4000/sender/mail", nil)
-	q := req.URL.Query()
-	q.Add("tos", tos)
-	q.Add("subject", sub)
-	q.Add("content", con)
-	req.URL.RawQuery = q.Encode()
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		fmt.Println(err)
-		return err
+	mail := lmstfy.Mail{
+		Tos:     tos,
+		Subject: sub,
+		Content: con,
 	}
-	defer resp.Body.Close()
+	if strings.Contains(sub, "故障") {
+		err := lmstfy.ProduceProblemMail(mail)
+		if err != nil {
+			log2.Logger.Error("failed to produce create new pool account event")
+			return echo.NewHTTPError(http.StatusInternalServerError, "internal error")
+		}
+	} else {
+		err := lmstfy.ProduceOKMail(mail)
+		if err != nil {
+			log2.Logger.Error("failed to produce create new pool account event")
+			return echo.NewHTTPError(http.StatusInternalServerError, "internal error")
+		}
+	}
+
+	//fmt.Println(con)
+	//req, err := http.NewRequest("GET", "http://127.0.0.1:4000/sender/mail", nil)
+	//q := req.URL.Query()
+	//q.Add("tos", tos)
+	//q.Add("subject", sub)
+	//q.Add("content", con)
+	//req.URL.RawQuery = q.Encode()
+	//resp, err := http.DefaultClient.Do(req)
+	//if err != nil {
+	//	fmt.Println(err)
+	//	return err
+	//}
+	//defer resp.Body.Close()
 	return c.String(http.StatusOK, "success")
+}
+
+func parseFlag() {
+	flag.BoolVar(&debugMode, "debug", false, "set log level")
+	flag.Parse()
 }

@@ -14,6 +14,7 @@ const (
 
 type Config struct {
 	ServerPort string `json:"server_port"`
+	LogDir     string `json:"log_dir"`
 	Lmstfy     struct {
 		Host      string `json:"host"`
 		Port      int    `json:"port"`
