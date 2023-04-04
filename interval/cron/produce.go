@@ -113,14 +113,16 @@ func GetMergedMails(MailKeys []string, mailTypes []string) []lmstfy.Mail {
 			//fmt.Println(value)
 			if strings.Contains(mailType, "*") {
 				parts := strings.Split(mailType, "*")
-				s := 1
+				match := true
 				for _, part := range parts {
 					fmt.Println("part：", part)
 					if !strings.Contains(mail.Sub, part) {
-						s = 0
+						match = false
+						// 匹配不到mailType中的part时直接中断循环，从而减少代码运行的时间
+						break
 					}
 				}
-				if s == 1 {
+				if match {
 					isExistMailType = 1
 					MailMap[mailType] = append(MailMap[mailType], mail)
 				}
@@ -134,17 +136,17 @@ func GetMergedMails(MailKeys []string, mailTypes []string) []lmstfy.Mail {
 		}
 	}
 
-	for mailType, mails := range MailMap {
-		if len(mails) == 0 {
+	for mailType, mailTypeMails := range MailMap {
+		if len(mailTypeMails) == 0 {
 			continue
 		}
 		conAll := ""
-		for i, mail := range mails {
+		for i, mail := range mailTypeMails {
 			conAll = conAll + "第" + strconv.Itoa(i+1) + "封:\n" + mail.Con + "\n"
 		}
 		//fmt.Println("conAll:", conAll)
 		mergedMails = append(mergedMails, lmstfy.Mail{
-			Tos: mails[0].Tos,
+			Tos: mailTypeMails[0].Tos,
 			Sub: "[合并邮件][恢复]" + mailType,
 			Con: conAll,
 		})
