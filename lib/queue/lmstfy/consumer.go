@@ -18,7 +18,7 @@ func ConsumeNewProblemMailEvent() {
 
 	c := GetInstance()
 	for {
-		job, err := c.Client.Consume("new_problem_mail_event", 10, 2)
+		job, err := c.Client.Consume("new_problem_mail_event", 10, 5)
 		if err != nil {
 			log.Logger.Error(err.Error())
 			time.Sleep(time.Second * 1)
@@ -69,7 +69,7 @@ func ConsumeNewOKMailEvent() {
 
 	c := GetInstance()
 	for {
-		job, err := c.Client.Consume("new_ok_mail_event", 10, 2)
+		job, err := c.Client.Consume("new_ok_mail_event", 10, 5)
 		if err != nil {
 			log.Logger.Error(err.Error())
 			time.Sleep(time.Second * 1)
