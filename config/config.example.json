@@ -5,5 +5,17 @@
     "port": 7777,
     "namespace": "xxxxxxx",
     "token": "xxxxxxxx"
-  }
+  },
+  "redis": {
+    "address":"127.0.0.1:6379",
+    "db": 0
+  },
+  "mail_types": [
+    "dxpool api",
+    "可能出现分叉",
+    "节点*不通",
+    "stratum端口不通",
+    "钱包接口不通",
+    "test*123"
+  ]
 }

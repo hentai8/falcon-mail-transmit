@@ -21,6 +21,13 @@ type Config struct {
 		Namespace string `json:"namespace"`
 		Token     string `json:"token"`
 	} `json:"lmstfy"`
+	Redis     RedisStruct `json:"redis" validate:"required"`
+	MailTypes []string    `json:"mail_types"`
+}
+
+type RedisStruct struct {
+	Address string `json:"address"`
+	DB      int    `json:"db"`
 }
 
 func (c Config) Validate() error {

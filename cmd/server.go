@@ -2,9 +2,11 @@ package main
 
 import (
 	"falcon-mail-transmit/interval/config"
+	"falcon-mail-transmit/interval/cron"
 	"falcon-mail-transmit/interval/utils"
 	log2 "falcon-mail-transmit/lib/log"
 	"falcon-mail-transmit/lib/queue/lmstfy"
+	"falcon-mail-transmit/lib/redis"
 	"flag"
 	"fmt"
 	"github.com/bitleak/lmstfy/client"
@@ -12,10 +14,12 @@ import (
 	"github.com/labstack/gommon/log"
 	rotatelogs "github.com/lestrrat-go/file-rotatelogs"
 	"github.com/sirupsen/logrus"
+	math "math/rand"
 	"net/http"
 	"os"
 	"regexp"
 	"strings"
+	"time"
 )
 
 type QueueLmstfyClient struct {
@@ -42,6 +46,8 @@ func main() {
 		log2.Logger.Fatal("failed to publish lmstfy test message: ", err)
 		os.Exit(-1)
 	}
+
+	go cron.ProduceFromRedis(cfg)
 
 	utils.HandlePanic(lmstfy.ConsumeNewProblemMailEvent, lmstfy.ConsumeNewOKMailEvent)
 
@@ -99,24 +105,58 @@ func save(c echo.Context) error {
 	con = rCon7c.ReplaceAllString(con, ", 目前故障次数")
 	con = rCon8.ReplaceAllString(con, "\n故障时间")
 
-	mail := lmstfy.Mail{
-		Tos:     tos,
-		Subject: sub,
-		Content: con,
-	}
-	if strings.Contains(sub, "故障") {
-		err := lmstfy.ProduceProblemMail(mail)
-		if err != nil {
-			log2.Logger.Error("failed to produce create new pool account event")
-			return echo.NewHTTPError(http.StatusInternalServerError, "internal error")
+	//mail := lmstfy.Mail{
+	//	Tos:     tos,
+	//	Subject: sub,
+	//	Content: con,
+	//}
+
+	// 在这里加上一个堵塞队列，全部存到redis里，每分钟从redis里取出一次，塞到消息队列里
+
+	// 生成redisKey，防止重复
+	redisKey := ""
+	for {
+		if strings.Contains(sub, "故障") {
+			redisKey = "problem-mail-" + GenerateNoWithoutPrefix()
+		} else {
+			redisKey = "ok-mail-" + GenerateNoWithoutPrefix()
 		}
-	} else {
-		err := lmstfy.ProduceOKMail(mail)
-		if err != nil {
-			log2.Logger.Error("failed to produce create new pool account event")
-			return echo.NewHTTPError(http.StatusInternalServerError, "internal error")
+
+		m := redis.HGetAll(redisKey)
+		if len(m) == 0 {
+			break
 		}
 	}
+
+	err := redis.HSet(redisKey, "tos", tos)
+	if err != nil {
+		log2.Logger.Error(err.Error())
+		return c.JSON(http.StatusInternalServerError, err.Error())
+	}
+	err = redis.HSet(redisKey, "sub", sub)
+	if err != nil {
+		log2.Logger.Error(err.Error())
+		return c.JSON(http.StatusInternalServerError, err.Error())
+	}
+	err = redis.HSet(redisKey, "con", con)
+	if err != nil {
+		log2.Logger.Error(err.Error())
+		return c.JSON(http.StatusInternalServerError, err.Error())
+	}
+
+	//if strings.Contains(sub, "故障") {
+	//	err := lmstfy.ProduceProblemMail(mail)
+	//	if err != nil {
+	//		log2.Logger.Error("failed to produce.go create new pool account event")
+	//		return echo.NewHTTPError(http.StatusInternalServerError, "internal error")
+	//	}
+	//} else {
+	//	err := lmstfy.ProduceOKMail(mail)
+	//	if err != nil {
+	//		log2.Logger.Error("failed to produce.go create new pool account event")
+	//		return echo.NewHTTPError(http.StatusInternalServerError, "internal error")
+	//	}
+	//}
 
 	//fmt.Println(con)
 	//req, err := http.NewRequest("GET", "http://127.0.0.1:4000/sender/mail", nil)
@@ -137,4 +177,12 @@ func save(c echo.Context) error {
 func parseFlag() {
 	flag.BoolVar(&debugMode, "debug", false, "set log level")
 	flag.Parse()
+}
+
+func GenerateNoWithoutPrefix() string {
+	date := time.Now().Format("20060102")
+	ts := time.Now().UnixNano() / 1e6 % 1e5
+	r := math.Intn(1000)
+	no := fmt.Sprintf("%s%07d%03d", date[2:], ts, r)
+	return no
 }

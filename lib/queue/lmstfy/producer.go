@@ -7,9 +7,9 @@ import (
 )
 
 type Mail struct {
-	Tos     string `json:"tos"`
-	Subject string `json:"subject"`
-	Content string `json:"content"`
+	Tos string `json:"tos"`
+	Sub string `json:"sub"`
+	Con string `json:"con"`
 }
 
 func Ping() (err error) {

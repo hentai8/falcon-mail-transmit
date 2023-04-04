@@ -37,12 +37,12 @@ func ConsumeNewProblemMailEvent() {
 			continue
 		}
 
-		fmt.Println(mail.Content)
+		fmt.Println(mail.Con)
 		req, err := http.NewRequest("GET", "http://127.0.0.1:4000/sender/mail", nil)
 		q := req.URL.Query()
 		q.Add("tos", mail.Tos)
-		q.Add("subject", mail.Subject)
-		q.Add("content", mail.Content)
+		q.Add("subject", mail.Sub)
+		q.Add("content", mail.Con)
 		req.URL.RawQuery = q.Encode()
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
@@ -88,12 +88,12 @@ func ConsumeNewOKMailEvent() {
 			continue
 		}
 
-		fmt.Println(mail.Content)
+		fmt.Println(mail.Con)
 		req, err := http.NewRequest("GET", "http://127.0.0.1:4000/sender/mail", nil)
 		q := req.URL.Query()
 		q.Add("tos", mail.Tos)
-		q.Add("subject", mail.Subject)
-		q.Add("content", mail.Content)
+		q.Add("subject", mail.Sub)
+		q.Add("content", mail.Con)
 		req.URL.RawQuery = q.Encode()
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
