@@ -36,8 +36,8 @@ func ProduceFromRedis(cfg *config.Config) {
 				// 先全部从redis里取出来，转换为struct
 				problemMailKeys := redis.Keys("problem-mail-*")
 				okMailKeys := redis.Keys("ok-mail-*")
-				okMergedMails := GetMergedMails(okMailKeys, cfg.MailTypes)
-				problemMails := GetMergedMails(problemMailKeys, cfg.MailTypes)
+				okMergedMails := GetMergedMails(okMailKeys, cfg.MailTypes, "恢复")
+				problemMails := GetMergedMails(problemMailKeys, cfg.MailTypes, "故障")
 				fmt.Println("okMergedMails:", okMergedMails)
 				fmt.Println("problemMails:", problemMails)
 				for _, problemMail := range problemMails {
@@ -68,7 +68,7 @@ type MergedMails struct {
 	Sub string `json:"sub"`
 }
 
-func GetMergedMails(MailKeys []string, mailTypes []string) []lmstfy.Mail {
+func GetMergedMails(MailKeys []string, mailTypes []string, subjectType string) []lmstfy.Mail {
 	var mails []lmstfy.Mail
 	for _, MailKey := range MailKeys {
 		mapMail := redis.HGetAll(MailKey)
@@ -147,7 +147,7 @@ func GetMergedMails(MailKeys []string, mailTypes []string) []lmstfy.Mail {
 		//fmt.Println("conAll:", conAll)
 		mergedMails = append(mergedMails, lmstfy.Mail{
 			Tos: mailTypeMails[0].Tos,
-			Sub: "[合并邮件][恢复]" + mailType,
+			Sub: "[合并邮件][" + subjectType + "]" + mailType,
 			Con: conAll,
 		})
 	}
