@@ -49,7 +49,7 @@ func main() {
 
 	go cron.ProduceFromRedis(cfg)
 
-	utils.HandlePanic(lmstfy.ConsumeNewProblemMailEvent, lmstfy.ConsumeNewOKMailEvent)
+	utils.HandlePanic(lmstfy.ConsumeNewProblemMailEvent, lmstfy.ConsumeNewOKMailEvent, lmstfy.ConsumeNewCallbackMailEvent)
 
 	e := echo.New()
 	e.GET("/", func(c echo.Context) error {
@@ -68,42 +68,50 @@ func save(c echo.Context) error {
 	fmt.Println("subject:", sub)
 	fmt.Println("content:", con)
 
-	rSub1 := regexp.MustCompile("\\[P0\\]")
-	rSub2p := regexp.MustCompile("\\[PROBLEM\\]")
-	rSub2o := regexp.MustCompile("\\[OK\\]")
-	rSub3 := regexp.MustCompile("\\[\\]")
-	rSub4 := regexp.MustCompile("。[^\\]]*\\]")
-	rSub5 := regexp.MustCompile("\\[[^\\]]*\\]$")
+	if strings.Contains(sub, "curl") {
+		rSub1 := regexp.MustCompile("curl")
+		rSub2 := regexp.MustCompile("http://*resp:")
 
-	sub = rSub1.ReplaceAllString(sub, "[海外矿池]")
-	sub = rSub2p.ReplaceAllString(sub, "[故障]")
-	sub = rSub2o.ReplaceAllString(sub, "[恢复]")
-	sub = rSub3.ReplaceAllString(sub, "")
-	sub = rSub4.ReplaceAllString(sub, "]")
-	sub = rSub5.ReplaceAllString(sub, "")
-	fmt.Println(sub)
+		sub = rSub1.ReplaceAllString(sub, "[回调函数]")
+		sub = rSub2.ReplaceAllString(sub, "")
+	} else {
+		rSub1 := regexp.MustCompile("\\[P0\\]")
+		rSub2p := regexp.MustCompile("\\[PROBLEM\\]")
+		rSub2o := regexp.MustCompile("\\[OK\\]")
+		rSub3 := regexp.MustCompile("\\[\\]")
+		rSub4 := regexp.MustCompile("。[^\\]]*\\]")
+		rSub5 := regexp.MustCompile("\\[[^\\]]*\\]$")
 
-	rCon1 := regexp.MustCompile("\nP0")
-	rCon2p := regexp.MustCompile("PROBLEM")
-	rCon2o := regexp.MustCompile("OK")
-	rCon3 := regexp.MustCompile("\nEndpoint")
-	rCon4 := regexp.MustCompile("\nMetric")
-	rCon5 := regexp.MustCompile("\nTags")
-	rCon6 := regexp.MustCompile("\nNote")
-	rCon7m := regexp.MustCompile("\nMax")
-	rCon7c := regexp.MustCompile(", Current")
-	rCon8 := regexp.MustCompile("\nTimestamp")
+		sub = rSub1.ReplaceAllString(sub, "[海外矿池]")
+		sub = rSub2p.ReplaceAllString(sub, "[故障]")
+		sub = rSub2o.ReplaceAllString(sub, "[恢复]")
+		sub = rSub3.ReplaceAllString(sub, "")
+		sub = rSub4.ReplaceAllString(sub, "]")
+		sub = rSub5.ReplaceAllString(sub, "")
+		fmt.Println(sub)
 
-	con = rCon1.ReplaceAllString(con, "\n海外矿池")
-	con = rCon2p.ReplaceAllString(con, "故障")
-	con = rCon2o.ReplaceAllString(con, "恢复")
-	con = rCon3.ReplaceAllString(con, "\n服务器")
-	con = rCon4.ReplaceAllString(con, "\n触发函数")
-	con = rCon5.ReplaceAllString(con, "\n子标签")
-	con = rCon6.ReplaceAllString(con, "\n故障原因")
-	con = rCon7m.ReplaceAllString(con, "\n最多通知次数")
-	con = rCon7c.ReplaceAllString(con, ", 目前故障次数")
-	con = rCon8.ReplaceAllString(con, "\n故障时间")
+		rCon1 := regexp.MustCompile("\nP0")
+		rCon2p := regexp.MustCompile("PROBLEM")
+		rCon2o := regexp.MustCompile("OK")
+		rCon3 := regexp.MustCompile("\nEndpoint")
+		rCon4 := regexp.MustCompile("\nMetric")
+		rCon5 := regexp.MustCompile("\nTags")
+		rCon6 := regexp.MustCompile("\nNote")
+		rCon7m := regexp.MustCompile("\nMax")
+		rCon7c := regexp.MustCompile(", Current")
+		rCon8 := regexp.MustCompile("\nTimestamp")
+
+		con = rCon1.ReplaceAllString(con, "\n海外矿池")
+		con = rCon2p.ReplaceAllString(con, "故障")
+		con = rCon2o.ReplaceAllString(con, "恢复")
+		con = rCon3.ReplaceAllString(con, "\n服务器")
+		con = rCon4.ReplaceAllString(con, "\n触发函数")
+		con = rCon5.ReplaceAllString(con, "\n子标签")
+		con = rCon6.ReplaceAllString(con, "\n故障原因")
+		con = rCon7m.ReplaceAllString(con, "\n最多通知次数")
+		con = rCon7c.ReplaceAllString(con, ", 目前故障次数")
+		con = rCon8.ReplaceAllString(con, "\n故障时间")
+	}
 
 	//mail := lmstfy.Mail{
 	//	Tos:     tos,
@@ -118,7 +126,12 @@ func save(c echo.Context) error {
 	for {
 		if strings.Contains(sub, "故障") {
 			redisKey = "problem-mail-" + GenerateNoWithoutPrefix()
+		} else if strings.Contains(sub, "恢复") {
+			redisKey = "ok-mail-" + GenerateNoWithoutPrefix()
+		} else if strings.Contains(sub, "回调函数") {
+			redisKey = "callback-mail-" + GenerateNoWithoutPrefix()
 		} else {
+			// 做规避，防止出现不可预知的情况
 			redisKey = "ok-mail-" + GenerateNoWithoutPrefix()
 		}
 

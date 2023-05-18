@@ -36,10 +36,13 @@ func ProduceFromRedis(cfg *config.Config) {
 				// 先全部从redis里取出来，转换为struct
 				problemMailKeys := redis.Keys("problem-mail-*")
 				okMailKeys := redis.Keys("ok-mail-*")
+				callbackMailKeys := redis.Keys("callback-mail-*")
 				okMergedMails := GetMergedMails(okMailKeys, cfg.MailTypes, "恢复")
 				problemMails := GetMergedMails(problemMailKeys, cfg.MailTypes, "故障")
+				callbackMails := GetMergedMails(callbackMailKeys, cfg.MailTypes, "回调函数")
 				fmt.Println("okMergedMails:", okMergedMails)
 				fmt.Println("problemMails:", problemMails)
+				fmt.Println("callbackMails:", callbackMails)
 				for _, problemMail := range problemMails {
 					err = lmstfy.ProduceProblemMail(problemMail)
 					if err != nil {
@@ -49,6 +52,13 @@ func ProduceFromRedis(cfg *config.Config) {
 				}
 				for _, okMergedMail := range okMergedMails {
 					err = lmstfy.ProduceOKMail(okMergedMail)
+					if err != nil {
+						log.Logger.Error("failed to produce.go create new pool account event")
+						continue
+					}
+				}
+				for _, callbackMail := range callbackMails {
+					err = lmstfy.ProduceCallbackMail(callbackMail)
 					if err != nil {
 						log.Logger.Error("failed to produce.go create new pool account event")
 						continue

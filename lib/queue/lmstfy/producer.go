@@ -18,6 +18,19 @@ func Ping() (err error) {
 	return
 }
 
+func ProduceCallbackMail(mail Mail) (err error) {
+	m := new(bytes.Buffer)
+	err = json.NewEncoder(m).Encode(mail)
+	if err != nil {
+		log.Logger.Error("failed to create pool account event")
+		return
+	}
+	c := GetInstance()
+	jobId, err := c.Client.Publish("new_callback_mail_event", m.Bytes(), 0, 3, 5)
+	log.Logger.Info("lmstfy new callback mail event: ", jobId)
+	return
+}
+
 func ProduceProblemMail(mail Mail) (err error) {
 	m := new(bytes.Buffer)
 	err = json.NewEncoder(m).Encode(mail)
