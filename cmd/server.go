@@ -70,7 +70,7 @@ func save(c echo.Context) error {
 
 	if strings.Contains(sub, "curl") {
 		rSub1 := regexp.MustCompile("curl")
-		rSub2 := regexp.MustCompile("http://*resp:")
+		rSub2 := regexp.MustCompile("http://.*resp:")
 
 		sub = rSub1.ReplaceAllString(sub, "[回调函数]")
 		sub = rSub2.ReplaceAllString(sub, "")

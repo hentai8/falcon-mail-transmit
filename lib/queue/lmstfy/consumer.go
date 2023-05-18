@@ -153,7 +153,7 @@ func ConsumeNewCallbackMailEvent() {
 		}
 		resp.Body.Close()
 
-		err1 := c.Client.Ack("new_ok_mail_event", job.ID)
+		err1 := c.Client.Ack("new_callback_mail_event", job.ID)
 		if err1 != nil {
 			log.Logger.Error("failed to ack job")
 			continue
