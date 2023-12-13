@@ -38,18 +38,42 @@ func ConsumeNewProblemMailEvent() {
 		}
 
 		fmt.Println(mail.Con)
-		req, err := http.NewRequest("GET", "http://127.0.0.1:4000/sender/mail", nil)
+		req, err := http.NewRequest("POST", "http://127.0.0.1:4000/sender/mail", nil)
 		q := req.URL.Query()
 		q.Add("tos", mail.Tos)
 		q.Add("subject", mail.Sub)
 		q.Add("content", mail.Con)
 		req.URL.RawQuery = q.Encode()
 		resp, err := http.DefaultClient.Do(req)
-		if err != nil {
-			log.Logger.Error(err)
-			continue
+		if err != nil || resp.StatusCode != 200 {
+			if err != nil {
+				log.Logger.Error("err:", err)
+			}
+			log.Logger.Error("failed to send mail by main email, try to send by backup email")
+
+			req2, err := http.NewRequest("POST", "http://127.0.0.1:4001/sender/mail", nil)
+			q2 := req2.URL.Query()
+			q2.Add("tos", mail.Tos)
+			q2.Add("subject", "[主邮箱错误]"+mail.Sub)
+			q2.Add("content", mail.Con)
+			req2.URL.RawQuery = q2.Encode()
+			resp2, err := http.DefaultClient.Do(req2)
+			if err != nil || resp2.StatusCode != 200 {
+				if err != nil {
+					log.Logger.Error(err)
+				}
+				log.Logger.Error("failed to send mail by backup email!!!")
+				continue
+			} else {
+				log.Logger.Info("success send mail by backup email success")
+			}
+			resp2.Body.Close()
+		} else {
+			log.Logger.Info("send mail by main email success")
 		}
-		resp.Body.Close()
+		if resp != nil {
+			resp.Body.Close()
+		}
 
 		err1 := c.Client.Ack("new_problem_mail_event", job.ID)
 		if err1 != nil {
@@ -89,18 +113,42 @@ func ConsumeNewOKMailEvent() {
 		}
 
 		fmt.Println(mail.Con)
-		req, err := http.NewRequest("GET", "http://127.0.0.1:4000/sender/mail", nil)
+		req, err := http.NewRequest("POST", "http://127.0.0.1:4000/sender/mail", nil)
 		q := req.URL.Query()
 		q.Add("tos", mail.Tos)
 		q.Add("subject", mail.Sub)
 		q.Add("content", mail.Con)
 		req.URL.RawQuery = q.Encode()
 		resp, err := http.DefaultClient.Do(req)
-		if err != nil {
-			log.Logger.Error(err)
-			continue
+		if err != nil || resp.StatusCode != 200 {
+			if err != nil {
+				log.Logger.Error("err:", err)
+			}
+			log.Logger.Error("failed to send mail by main email, try to send by backup email")
+
+			req2, err := http.NewRequest("POST", "http://127.0.0.1:4001/sender/mail", nil)
+			q2 := req2.URL.Query()
+			q2.Add("tos", mail.Tos)
+			q2.Add("subject", "[主邮箱错误]"+mail.Sub)
+			q2.Add("content", mail.Con)
+			req2.URL.RawQuery = q2.Encode()
+			resp2, err := http.DefaultClient.Do(req2)
+			if err != nil || resp2.StatusCode != 200 {
+				if err != nil {
+					log.Logger.Error(err)
+				}
+				log.Logger.Error("failed to send mail by backup email!!!")
+				continue
+			} else {
+				log.Logger.Info("success send mail by backup email success")
+			}
+			resp2.Body.Close()
+		} else {
+			log.Logger.Info("send mail by main email success")
 		}
-		resp.Body.Close()
+		if resp != nil {
+			resp.Body.Close()
+		}
 
 		err1 := c.Client.Ack("new_ok_mail_event", job.ID)
 		if err1 != nil {
@@ -140,18 +188,39 @@ func ConsumeNewCallbackMailEvent() {
 		}
 
 		fmt.Println(mail.Con)
-		req, err := http.NewRequest("GET", "http://127.0.0.1:4000/sender/mail", nil)
+		req, err := http.NewRequest("POST", "http://127.0.0.1:4000/sender/mail", nil)
 		q := req.URL.Query()
 		q.Add("tos", mail.Tos)
 		q.Add("subject", mail.Sub)
 		q.Add("content", mail.Con)
 		req.URL.RawQuery = q.Encode()
 		resp, err := http.DefaultClient.Do(req)
-		if err != nil {
-			log.Logger.Error(err)
-			continue
+		if err != nil || resp.StatusCode != 200 {
+			if err != nil {
+				log.Logger.Error("err:", err)
+			}
+			log.Logger.Error("failed to send mail by main email, try to send by backup email")
+			req2, err := http.NewRequest("POST", "http://127.0.0.1:4001/sender/mail", nil)
+			q2 := req2.URL.Query()
+			q2.Add("tos", mail.Tos)
+			q2.Add("subject", "[主邮箱错误]"+mail.Sub)
+			q2.Add("content", mail.Con)
+			req2.URL.RawQuery = q2.Encode()
+			resp2, err := http.DefaultClient.Do(req2)
+			if err != nil || resp2.StatusCode != 200 {
+				if err != nil {
+					log.Logger.Error(err)
+				}
+				log.Logger.Error("failed to send mail by backup email!!!")
+				continue
+			}
+			resp2.Body.Close()
+		} else {
+			log.Logger.Info("send mail by main email success")
 		}
-		resp.Body.Close()
+		if resp != nil {
+			resp.Body.Close()
+		}
 
 		err1 := c.Client.Ack("new_callback_mail_event", job.ID)
 		if err1 != nil {
