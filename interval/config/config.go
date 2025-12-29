@@ -2,9 +2,10 @@ package config
 
 import (
 	"encoding/json"
-	"github.com/go-playground/validator/v10"
 	"io/ioutil"
 	"path/filepath"
+
+	"github.com/go-playground/validator/v10"
 )
 
 const (
@@ -21,13 +22,19 @@ type Config struct {
 		Namespace string `json:"namespace"`
 		Token     string `json:"token"`
 	} `json:"lmstfy"`
-	Redis     RedisStruct `json:"redis" validate:"required"`
-	MailTypes []string    `json:"mail_types"`
+	Redis     RedisStruct  `json:"redis" validate:"required"`
+	Feishu    FeishuStruct `json:"feishu" validate:"required"`
+	MailTypes []string     `json:"mail_types"`
 }
 
 type RedisStruct struct {
 	Address string `json:"address"`
 	DB      int    `json:"db"`
+}
+
+type FeishuStruct struct {
+	AppID     string `json:"app_id"`
+	AppSecret string `json:"app_secret"`
 }
 
 func (c Config) Validate() error {

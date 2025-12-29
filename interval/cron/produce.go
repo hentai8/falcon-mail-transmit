@@ -33,16 +33,25 @@ func ProduceFromRedis(cfg *config.Config) {
 				log.Logger.Error(err.Error())
 			}
 			if result {
-				// 先全部从redis里取出来，转换为struct
+				// 邮件队列
 				problemMailKeys := redis.Keys("problem-mail-*")
 				okMailKeys := redis.Keys("ok-mail-*")
 				callbackMailKeys := redis.Keys("callback-mail-*")
+
+				// 飞书队列
+				problemFeishuKeys := redis.Keys("problem-feishu-*")
+				okFeishuKeys := redis.Keys("ok-feishu-*")
+				callbackFeishuKeys := redis.Keys("callback-feishu-*")
+
+				// 处理邮件消息
 				okMergedMails := GetMergedMails(okMailKeys, cfg.MailTypes, "恢复")
 				problemMails := GetMergedMails(problemMailKeys, cfg.MailTypes, "故障")
 				callbackMails := GetMergedMails(callbackMailKeys, cfg.MailTypes, "回调函数")
+
 				fmt.Println("okMergedMails:", okMergedMails)
 				fmt.Println("problemMails:", problemMails)
 				fmt.Println("callbackMails:", callbackMails)
+
 				for _, problemMail := range problemMails {
 					err = lmstfy.ProduceProblemMail(problemMail)
 					if err != nil {
@@ -61,6 +70,37 @@ func ProduceFromRedis(cfg *config.Config) {
 					err = lmstfy.ProduceCallbackMail(callbackMail)
 					if err != nil {
 						log.Logger.Error("failed to produce.go create new pool account event")
+						continue
+					}
+				}
+
+				// 处理飞书消息
+				okMergedFeishu := GetMergedFeishu(okFeishuKeys, cfg.MailTypes, "恢复")
+				problemFeishu := GetMergedFeishu(problemFeishuKeys, cfg.MailTypes, "故障")
+				callbackFeishu := GetMergedFeishu(callbackFeishuKeys, cfg.MailTypes, "回调函数")
+
+				fmt.Println("okMergedFeishu:", okMergedFeishu)
+				fmt.Println("problemFeishu:", problemFeishu)
+				fmt.Println("callbackFeishu:", callbackFeishu)
+
+				for _, feishu := range problemFeishu {
+					err = lmstfy.ProduceProblemFeishu(feishu)
+					if err != nil {
+						log.Logger.Error("failed to produce problem feishu event")
+						continue
+					}
+				}
+				for _, feishu := range okMergedFeishu {
+					err = lmstfy.ProduceOKFeishu(feishu)
+					if err != nil {
+						log.Logger.Error("failed to produce ok feishu event")
+						continue
+					}
+				}
+				for _, feishu := range callbackFeishu {
+					err = lmstfy.ProduceCallbackFeishu(feishu)
+					if err != nil {
+						log.Logger.Error("failed to produce callback feishu event")
 						continue
 					}
 				}
@@ -164,4 +204,84 @@ func GetMergedMails(MailKeys []string, mailTypes []string, subjectType string) [
 	//fmt.Println("mergedMails:", mergedMails)
 
 	return mergedMails
+}
+
+// GetMergedFeishu 处理飞书消息的合并逻辑
+func GetMergedFeishu(feishuKeys []string, messageTypes []string, subjectType string) []lmstfy.Feishu {
+	var feishuMessages []lmstfy.Feishu
+
+	// 从 Redis 中读取所有飞书消息
+	for _, feishuKey := range feishuKeys {
+		mapFeishu := redis.HGetAll(feishuKey)
+		var feishu lmstfy.Feishu
+		jsonFeishu, err := json.Marshal(mapFeishu)
+		if err != nil {
+			log.Logger.Error(err.Error())
+			continue
+		}
+		err = json.Unmarshal(jsonFeishu, &feishu)
+		if err != nil {
+			log.Logger.Error(err.Error())
+			continue
+		}
+		feishuMessages = append(feishuMessages, feishu)
+		err = redis.Del(feishuKey)
+		if err != nil {
+			log.Logger.Error(err.Error())
+			continue
+		}
+	}
+
+	// 构造一个map，key为message_type，value为[]Feishu
+	feishuMap := make(map[string][]lmstfy.Feishu)
+	for _, t := range messageTypes {
+		feishuMap[t] = make([]lmstfy.Feishu, 0)
+	}
+
+	var mergedFeishu []lmstfy.Feishu
+
+	// 根据message_type合并相似的内容
+	for _, feishu := range feishuMessages {
+		isExistMessageType := 0
+		for messageType, _ := range feishuMap {
+			if strings.Contains(messageType, "*") {
+				parts := strings.Split(messageType, "*")
+				match := true
+				for _, part := range parts {
+					if !strings.Contains(feishu.Sub, part) {
+						match = false
+						break
+					}
+				}
+				if match {
+					isExistMessageType = 1
+					feishuMap[messageType] = append(feishuMap[messageType], feishu)
+				}
+			} else if strings.Contains(feishu.Sub, messageType) {
+				isExistMessageType = 1
+				feishuMap[messageType] = append(feishuMap[messageType], feishu)
+			}
+		}
+		if isExistMessageType == 0 {
+			mergedFeishu = append(mergedFeishu, feishu)
+		}
+	}
+
+	// 合并同类型的飞书消息
+	for messageType, typeFeishu := range feishuMap {
+		if len(typeFeishu) == 0 {
+			continue
+		}
+		contentAll := ""
+		for i, feishu := range typeFeishu {
+			contentAll = contentAll + "**第" + strconv.Itoa(i+1) + "条:**\n" + feishu.Con + "\n\n"
+		}
+		mergedFeishu = append(mergedFeishu, lmstfy.Feishu{
+			Tos: typeFeishu[0].Tos,
+			Sub: "[合并消息][" + subjectType + "]" + messageType,
+			Con: contentAll,
+		})
+	}
+
+	return mergedFeishu
 }

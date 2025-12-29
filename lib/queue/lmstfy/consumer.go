@@ -1,13 +1,20 @@
 package lmstfy
 
 import (
+	"context"
 	"encoding/json"
+	"falcon-mail-transmit/interval/config"
 	"falcon-mail-transmit/lib/log"
 	"fmt"
 	"net/http"
 	"time"
+
+	lark "github.com/larksuite/oapi-sdk-go/v3"
+	larkcore "github.com/larksuite/oapi-sdk-go/v3/core"
+	larkim "github.com/larksuite/oapi-sdk-go/v3/service/im/v1"
 )
 
+// Mail消费函数
 func ConsumeNewProblemMailEvent() {
 
 	defer func() {
@@ -228,4 +235,190 @@ func ConsumeNewCallbackMailEvent() {
 			continue
 		}
 	}
+}
+
+// 飞书消费函数
+func ConsumeNewProblemFeishuEvent() {
+
+	defer func() {
+		if err := recover(); err != nil {
+			log.Logger.Error("consume feishu queue panic: ", err)
+		}
+	}()
+
+	c := GetInstance()
+	for {
+		job, err := c.Client.Consume("new_problem_feishu_event", 10, 5)
+		if err != nil {
+			log.Logger.Error(err.Error())
+			time.Sleep(time.Second * 1)
+			continue
+		}
+		if job == nil {
+			log.Logger.Info("no new_problem_feishu_event job, continue")
+			continue
+		}
+		log.Logger.Info("consume new_problem_feishu_event, id: ", job.ID)
+
+		var feishu Feishu
+		err = json.Unmarshal(job.Data, &feishu)
+		if err != nil {
+			log.Logger.Error("failed to unmarshal problem feishu event job data")
+			continue
+		}
+
+		err = sendFeishuMessage(feishu)
+		if err != nil {
+			log.Logger.Error("failed to send feishu message: ", err)
+			continue
+		}
+
+		err1 := c.Client.Ack("new_problem_feishu_event", job.ID)
+		if err1 != nil {
+			log.Logger.Error("failed to ack job")
+			continue
+		}
+	}
+}
+
+func ConsumeNewOKFeishuEvent() {
+
+	defer func() {
+		if err := recover(); err != nil {
+			log.Logger.Error("consume feishu queue panic: ", err)
+		}
+	}()
+
+	c := GetInstance()
+	for {
+		job, err := c.Client.Consume("new_ok_feishu_event", 10, 5)
+		if err != nil {
+			log.Logger.Error(err.Error())
+			time.Sleep(time.Second * 1)
+			continue
+		}
+		if job == nil {
+			log.Logger.Info("no new_ok_feishu_event job, continue")
+			continue
+		}
+		log.Logger.Info("consume new_ok_feishu_event, id: ", job.ID)
+
+		var feishu Feishu
+		err = json.Unmarshal(job.Data, &feishu)
+		if err != nil {
+			log.Logger.Error("failed to unmarshal ok feishu event job data")
+			continue
+		}
+
+		err = sendFeishuMessage(feishu)
+		if err != nil {
+			log.Logger.Error("failed to send feishu message: ", err)
+			continue
+		}
+
+		err1 := c.Client.Ack("new_ok_feishu_event", job.ID)
+		if err1 != nil {
+			log.Logger.Error("failed to ack job")
+			continue
+		}
+	}
+}
+
+func ConsumeNewCallbackFeishuEvent() {
+
+	defer func() {
+		if err := recover(); err != nil {
+			log.Logger.Error("consume feishu queue panic: ", err)
+		}
+	}()
+
+	c := GetInstance()
+	for {
+		job, err := c.Client.Consume("new_callback_feishu_event", 10, 5)
+		if err != nil {
+			log.Logger.Error(err.Error())
+			time.Sleep(time.Second * 1)
+			continue
+		}
+		if job == nil {
+			log.Logger.Info("no new_callback_feishu_event job, continue")
+			continue
+		}
+		log.Logger.Info("consume new_callback_feishu_event, id: ", job.ID)
+
+		var feishu Feishu
+		err = json.Unmarshal(job.Data, &feishu)
+		if err != nil {
+			log.Logger.Error("failed to unmarshal callback feishu event job data")
+			continue
+		}
+
+		err = sendFeishuMessage(feishu)
+		if err != nil {
+			log.Logger.Error("failed to send feishu message: ", err)
+			continue
+		}
+
+		err1 := c.Client.Ack("new_callback_feishu_event", job.ID)
+		if err1 != nil {
+			log.Logger.Error("failed to ack job")
+			continue
+		}
+	}
+}
+
+// 使用飞书官方SDK发送消息
+func sendFeishuMessage(feishu Feishu) error {
+	// 加载配置
+	cfg, err := config.Load()
+	if err != nil {
+		return fmt.Errorf("failed to load config: %v", err)
+	}
+
+	// 创建飞书 Client
+	client := lark.NewClient(cfg.Feishu.AppID, cfg.Feishu.AppSecret)
+
+	// 构造消息内容
+	// 使用富文本格式
+	content := fmt.Sprintf(`{
+		"zh_cn": {
+			"title": "%s",
+			"content": [
+				[
+					{
+						"tag": "text",
+						"text": "%s"
+					}
+				]
+			]
+		}
+	}`, feishu.Sub, feishu.Con)
+
+	// 创建请求对象
+	req := larkim.NewCreateMessageReqBuilder().
+		ReceiveIdType("user_id").
+		Body(larkim.NewCreateMessageReqBodyBuilder().
+			ReceiveId(feishu.Tos).
+			MsgType("post"). // 使用富文本格式
+			Content(content).
+			Build()).
+		Build()
+
+	// 发起请求
+	resp, err := client.Im.V1.Message.Create(context.Background(), req)
+
+	// 处理错误
+	if err != nil {
+		return fmt.Errorf("feishu api error: %v", err)
+	}
+
+	// 服务端错误处理
+	if !resp.Success() {
+		return fmt.Errorf("feishu response error - logId: %s, error: %s",
+			resp.RequestId(), larkcore.Prettify(resp.CodeError))
+	}
+
+	// 业务处理成功
+	log.Logger.Info("send feishu message success, response: ", larkcore.Prettify(resp))
+	return nil
 }
