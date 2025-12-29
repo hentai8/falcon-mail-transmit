@@ -10,7 +10,6 @@ import (
 	"time"
 
 	lark "github.com/larksuite/oapi-sdk-go/v3"
-	larkcore "github.com/larksuite/oapi-sdk-go/v3/core"
 	larkim "github.com/larksuite/oapi-sdk-go/v3/service/im/v1"
 )
 
@@ -394,31 +393,34 @@ func sendFeishuMessage(feishu Feishu) error {
 		}
 	}`, feishu.Sub, feishu.Con)
 
-	// 创建请求对象
-	req := larkim.NewCreateMessageReqBuilder().
-		ReceiveIdType("user_id").
-		Body(larkim.NewCreateMessageReqBodyBuilder().
-			ReceiveId(feishu.Tos).
-			MsgType("post"). // 使用富文本格式
-			Content(content).
-			Build()).
-		Build()
+	for _, tos := range feishu.Tos {
+		// 创建请求对象
+		req := larkim.NewCreateMessageReqBuilder().
+			ReceiveIdType("user_id").
+			Body(larkim.NewCreateMessageReqBodyBuilder().
+				ReceiveId(tos).
+				MsgType("post"). // 使用富文本格式
+				Content(content).
+				Build()).
+			Build()
 
-	// 发起请求
-	resp, err := client.Im.V1.Message.Create(context.Background(), req)
+		// 发起请求
+		resp, err := client.Im.V1.Message.Create(context.Background(), req)
 
-	// 处理错误
-	if err != nil {
-		return fmt.Errorf("feishu api error: %v", err)
+		// 处理错误
+		if err != nil {
+			log.Logger.Error("failed to send to ", tos, ": ", err)
+
+		}
+
+		// 服务端错误处理
+		if !resp.Success() {
+			log.Logger.Error("failed to send to ", tos, ": ", resp.Msg)
+			continue
+		}
+
+		log.Logger.Info("✓ Sent to ", tos)
 	}
 
-	// 服务端错误处理
-	if !resp.Success() {
-		return fmt.Errorf("feishu response error - logId: %s, error: %s",
-			resp.RequestId(), larkcore.Prettify(resp.CodeError))
-	}
-
-	// 业务处理成功
-	log.Logger.Info("send feishu message success, response: ", larkcore.Prettify(resp))
 	return nil
 }
