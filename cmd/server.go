@@ -157,6 +157,7 @@ func feishu(c echo.Context) error {
 	return c.String(http.StatusOK, "success")
 }
 
+// GetMergedMails 处理邮件的合并逻辑
 func save(c echo.Context) error {
 	tos := c.FormValue("tos")
 	sub := c.FormValue("subject")
