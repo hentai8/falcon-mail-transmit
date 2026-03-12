@@ -145,13 +145,13 @@ on:
 在 `ai_review.py` 中修改：
 
 ```python
-self.model = "claude-3-5-sonnet-20241022"  # 可改为其他模型
+self.model = "claude-sonnet-4-6"  # 可改为其他模型
 ```
 
 可用模型：
-- `claude-3-5-sonnet-20241022` - 最新版本（推荐）
-- `claude-3-opus-20240229` - 更强大但更慢
-- `claude-3-sonnet-20240229` - 平衡选择
+
+
+💡 **提示**：访问 [Anthropic 模型文档](https://docs.anthropic.com/en/docs/about-claude/models) 查看最新可用模型。
 
 ## 🐛 故障排查
 
@@ -179,20 +179,52 @@ self.model = "claude-3-5-sonnet-20241022"  # 可改为其他模型
 2. 确认有 Go 文件变更
 3. 查看是否有 API 调用错误
 
+### 问题 4: 模型不存在错误
+
+**错误信息**: `Error code: 404 - model: xxx not found`
+
+**解决方案**:
+1. 更新 `ai_review.py` 中的模型名称为可用版本
+2. 推荐使用: `claude-3-5-sonnet-20240620`
+3. 检查 [Anthropic 文档](https://docs.anthropic.com/en/docs/about-claude/models) 获取最新模型列表
+
+### 问题 5: API 配额超限
+
+**错误信息**: `Error code: 429 - rate limit exceeded`
+
+**解决方案**:
+1. 检查 Anthropic 账户配额
+2. 考虑升级到更高的使用层级
+3. 或减少审核频率/使用更便宜的模型
+
 ## 💰 费用说明
 
-### Anthropic API 定价（2026年3月）
+### Anthropic API 定价（参考）
 
-Claude 3.5 Sonnet:
+**Claude 3.5 Sonnet** (推荐):
 - 输入: $3 / 百万 tokens
 - 输出: $15 / 百万 tokens
 
+**Claude 3 Opus** (最强大):
+- 输入: $15 / 百万 tokens
+- 输出: $75 / 百万 tokens
+
+**Claude 3 Haiku** (最经济):
+- 输入: $0.25 / 百万 tokens
+- 输出: $1.25 / 百万 tokens
+
 ### 预估成本
 
-- 每次审核（~1000 行代码）: 约 $0.02 - $0.05
-- 每月 100 次提交: 约 $2 - $5
+使用 Claude 3.5 Sonnet：
+- 每次审核（~500-1000 行代码）: 约 $0.01 - $0.03
+- 每月 100 次提交: 约 $1 - $3
 
-💡 **建议**: 设置 API 使用限额以避免意外费用
+💡 **建议**: 
+- 开发阶段使用 Claude 3.5 Sonnet 获得最佳性能
+- 高频率项目可考虑 Claude 3 Haiku 降低成本
+- 设置 API 使用限额以避免意外费用
+
+⚠️ 价格可能变动，请访问 [Anthropic 定价页面](https://www.anthropic.com/pricing) 获取最新信息。
 
 ## 📚 相关文档
 

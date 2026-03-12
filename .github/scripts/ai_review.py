@@ -18,7 +18,7 @@ class CodeReviewer:
     
     def __init__(self, api_key: str):
         self.client = anthropic.Anthropic(api_key=api_key)
-        self.model = "claude-3-5-sonnet-20241022"  # 使用最新的 Claude 3.5 Sonnet
+        self.model = "claude-sonnet-4-6"  # Claude 4.6 Sonnet (稳定版本)
     
     def get_file_diff(self, file_path: str, before_sha: str, current_sha: str) -> str:
         """获取文件的 diff"""
