@@ -210,14 +210,7 @@ func save(c echo.Context) error {
 		con = rCon8.ReplaceAllString(con, "\n故障时间")
 	}
 
-	//mail := lmstfy.Mail{
-	//	Tos:     tos,
-	//	Subject: sub,
-	//	Content: con,
-	//}
-
 	// 在这里加上一个堵塞队列，全部存到redis里，每分钟从redis里取出一次，塞到消息队列里
-
 	// 生成redisKey，防止重复
 	redisKey := ""
 	for {
