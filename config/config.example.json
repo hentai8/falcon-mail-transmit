@@ -10,6 +10,10 @@
     "address":"127.0.0.1:6379",
     "db": 0
   },
+    "feishu": {
+    "app_id": "cli_xxx",
+    "app_secret": "xxx"
+  },
   "mail_types": [
     "dxpool api",
     "可能出现分叉",
