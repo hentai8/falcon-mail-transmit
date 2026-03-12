@@ -9,7 +9,7 @@ jobs:
   ai-code-review:
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write       # 需要 write 权限才能创建 commit comments
       issues: write
       pull-requests: write
     
