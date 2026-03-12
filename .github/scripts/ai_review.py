@@ -183,32 +183,65 @@ class GitHubCommentPoster:
         # 使用 GitHub CLI 发布评论
         comment_body = self._format_comment(review_result)
         
-        # 保存到文件
+        # 保存到文件作为备份
         with open('/tmp/review_comment.md', 'w', encoding='utf-8') as f:
             f.write(comment_body)
         
-        # 使用 gh cli 发布评论
+        # 使用 curl 发布评论
         try:
-            # 通过 API 创建 commit comment
-            subprocess.run(
+            result = subprocess.run(
                 [
                     "curl", "-X", "POST",
+                    "-w", "\n%{http_code}",  # 输出 HTTP 状态码
                     f"https://api.github.com/repos/{self.repo}/commits/{commit_sha}/comments",
                     "-H", f"Authorization: token {self.token}",
                     "-H", "Accept: application/vnd.github.v3+json",
+                    "-H", "Content-Type: application/json",
                     "-d", json.dumps({"body": comment_body})
                 ],
-                check=True,
                 capture_output=True,
-                text=True
+                text=True,
+                check=False  # 不自动抛出异常，手动检查
             )
-            print(f"✅ 审核结果已发布到 commit {commit_sha[:7]}")
-        except subprocess.CalledProcessError as e:
-            print(f"⚠️  发布评论失败: {e}", file=sys.stderr)
-            print(f"错误输出: {e.stderr}", file=sys.stderr)
+            
+            # 解析响应
+            output_lines = result.stdout.strip().split('\n')
+            http_code = output_lines[-1] if output_lines else "000"
+            response_body = '\n'.join(output_lines[:-1]) if len(output_lines) > 1 else ""
+            
+            # 检查 HTTP 状态码
+            if http_code.startswith('2'):  # 2xx 成功
+                print(f"✅ 审核结果已发布到 commit {commit_sha[:7]}")
+                print(f"   查看: https://github.com/{self.repo}/commit/{commit_sha}")
+            else:
+                # 发布失败，显示详细错误
+                print(f"⚠️  发布评论失败 (HTTP {http_code})", file=sys.stderr)
+                print(f"   仓库: {self.repo}", file=sys.stderr)
+                print(f"   Commit: {commit_sha}", file=sys.stderr)
+                
+                # 尝试解析错误信息
+                try:
+                    error_data = json.loads(response_body)
+                    if 'message' in error_data:
+                        print(f"   错误信息: {error_data['message']}", file=sys.stderr)
+                    if 'documentation_url' in error_data:
+                        print(f"   文档: {error_data['documentation_url']}", file=sys.stderr)
+                except:
+                    if response_body:
+                        print(f"   响应: {response_body[:200]}", file=sys.stderr)
+                
+                # 降级方案：输出到标准输出
+                print("\n" + "="*80)
+                print("📋 AI 审核结果（评论发布失败，以下是审核内容）:")
+                print("="*80)
+                print(comment_body)
+                print("="*80)
+                
+        except Exception as e:
+            print(f"⚠️  发布评论时发生异常: {e}", file=sys.stderr)
             # 降级方案：输出到标准输出
             print("\n" + "="*80)
-            print("📋 AI 审核结果:")
+            print("📋 AI 审核结果（评论发布失败，以下是审核内容）:")
             print("="*80)
             print(comment_body)
             print("="*80)
