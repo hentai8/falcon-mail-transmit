@@ -54,7 +54,7 @@ jobs:
       - name: Install dependencies
         if: steps.changed-files.outputs.has_changes == 'true'
         run: |
-          pip install anthropic
+          pip install anthropic pyyaml
 
       - name: Run AI Code Review
         if: steps.changed-files.outputs.has_changes == 'true'

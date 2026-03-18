@@ -9,16 +9,64 @@ import sys
 import json
 import argparse
 import subprocess
-from typing import List, Dict
+from typing import List, Dict, Optional
+from pathlib import Path
+import fnmatch
+try:
+    import yaml
+except ImportError:
+    print("⚠️  警告: PyYAML 未安装，将使用默认配置", file=sys.stderr)
+    yaml = None
 import anthropic
 
 
 class CodeReviewer:
     """使用 Claude AI 进行代码审核"""
     
-    def __init__(self, api_key: str):
+    def __init__(self, api_key: str, config_path: Optional[str] = None):
         self.client = anthropic.Anthropic(api_key=api_key)
-        self.model = "claude-sonnet-4-6"  # Claude 4.6 Sonnet (稳定版本)
+        self.config = self._load_config(config_path)
+        self.model = self.config.get('model', {}).get('name', 'claude-sonnet-4-6')
+    
+    def _load_config(self, config_path: Optional[str] = None) -> Dict:
+        """加载配置文件"""
+        if config_path is None:
+            config_path = '.github/ai-review-config.yml'
+        
+        if yaml and os.path.exists(config_path):
+            try:
+                with open(config_path, 'r', encoding='utf-8') as f:
+                    config = yaml.safe_load(f)
+                print(f"✅ 已加载配置文件: {config_path}")
+                return config
+            except Exception as e:
+                print(f"⚠️  加载配置文件失败: {e}，使用默认配置", file=sys.stderr)
+        else:
+            if config_path != '.github/ai-review-config.yml':
+                print(f"⚠️  配置文件不存在: {config_path}，使用默认配置", file=sys.stderr)
+        
+        return self._get_default_config()
+    
+    def _get_default_config(self) -> Dict:
+        """获取默认配置（向后兼容）"""
+        return {
+            'model': {'name': 'claude-sonnet-4-6', 'max_tokens': 8192, 'temperature': 0},
+            'output': {
+                'language': 'zh-CN',
+                'format': 'markdown',
+                'severity_labels': {'critical': '🔴 严重', 'warning': '🟡 警告', 'suggestion': '🔵 建议'}
+            },
+            'ignore': {'files': [], 'checks': []},
+            'severity_thresholds': {'include_positive_feedback': True}
+        }
+    
+    def should_ignore_file(self, file_path: str) -> bool:
+        """检查文件是否应该被忽略"""
+        ignore_patterns = self.config.get('ignore', {}).get('files', [])
+        for pattern in ignore_patterns:
+            if fnmatch.fnmatch(file_path, pattern):
+                return True
+        return False
     
     def get_file_diff(self, file_path: str, before_sha: str, current_sha: str) -> str:
         """获取文件的 diff"""
@@ -55,17 +103,27 @@ class CodeReviewer:
     def review_code(self, files: List[str], before_sha: str, current_sha: str) -> str:
         """使用 Claude AI 审核代码"""
         
+        # 过滤忽略的文件
+        filtered_files = [f for f in files if not self.should_ignore_file(f)]
+        if len(filtered_files) < len(files):
+            ignored_count = len(files) - len(filtered_files)
+            print(f"ℹ️  已忽略 {ignored_count} 个文件（根据配置规则）")
+        
+        if not filtered_files:
+            return "所有文件都被忽略，无需审核。"
+        
         # 构建审核提示词
-        review_prompt = self._build_review_prompt(files, before_sha, current_sha)
+        review_prompt = self._build_review_prompt(filtered_files, before_sha, current_sha)
         
         print("📝 正在调用 Claude API 进行代码审核...")
-        print(f"📊 审核文件数量: {len(files)}")
+        print(f"📊 审核文件数量: {len(filtered_files)}")
         
+        model_config = self.config.get('model', {})
         try:
             message = self.client.messages.create(
                 model=self.model,
-                max_tokens=8192,
-                temperature=0,
+                max_tokens=model_config.get('max_tokens', 8192),
+                temperature=model_config.get('temperature', 0),
                 system=self._get_system_prompt(),
                 messages=[
                     {
@@ -85,58 +143,85 @@ class CodeReviewer:
             return error_msg
     
     def _get_system_prompt(self) -> str:
-        """获取系统提示词 - 定义 AI 审核的规则和标准"""
-        return """你是一个专业的 Go 语言代码审核专家。你的任务是对提交的代码进行全面审核。
+        """获取系统提示词 - 从配置文件构建审核规则"""
+        output_config = self.config.get('output', {})
+        language = output_config.get('language', 'zh-CN')
+        format_type = output_config.get('format', 'markdown')
+        severity_labels = output_config.get('severity_labels', {})
+        
+        # 构建严重级别标签文本
+        severity_text = f"{severity_labels.get('critical', '🔴 严重')}、" \
+                       f"{severity_labels.get('warning', '🟡 警告')}、" \
+                       f"{severity_labels.get('suggestion', '🔵 建议')}"
+        
+        # 构建审核范围
+        review_scope_text = self._build_review_scope_text()
+        
+        # 使用配置的模板或默认模板
+        template = self.config.get('prompt_template', {}).get('system', '')
+        if template:
+            return template.format(
+                language=language,
+                format=format_type,
+                severity_labels=severity_text
+            ) + "\n\n" + review_scope_text
+        
+        # 默认提示词
+        return f"""你是一个专业的 Go 语言代码审核专家。你的任务是对提交的代码进行全面审核。
 
-审核范围应包括：
-
-1. **代码质量**
-   - Go 代码规范和最佳实践
-   - 命名约定（变量、函数、类型）
-   - 代码复杂度和可读性
-   - 重复代码和代码组织
-
-2. **安全性**
-   - 潜在的安全漏洞
-   - 敏感信息泄露（密钥、密码等）
-   - SQL/NoSQL 注入风险
-   - XSS、CSRF 等 Web 安全问题
-   - 输入验证和错误处理
-
-3. **性能**
-   - 并发安全问题（goroutine、channel 使用）
-   - 资源泄露（连接、文件句柄、goroutine）
-   - 潜在的死锁或竞态条件
-   - 内存和 CPU 性能问题
-   - 不必要的内存分配
-
-4. **Go 最佳实践**
-   - context 的正确使用
-   - error 处理模式
-   - defer、panic、recover 的使用
-   - interface 设计
-   - 包的依赖关系
-
-5. **可维护性**
-   - 代码注释的完整性
-   - 函数和方法的复杂度
-   - 测试覆盖率相关建议
-   - 文档和示例
+{review_scope_text}
 
 审核输出格式要求：
-- 使用中文输出
-- 使用 Markdown 格式
-- 为每个问题标注严重级别：🔴 严重、🟡 警告、🔵 建议
+- 使用{language}输出
+- 使用 {format_type} 格式
+- 为每个问题标注严重级别：{severity_text}
 - 提供具体的代码位置和改进建议
-- 如果代码质量很好，也要给予正面反馈
+- {'如果代码质量很好，也要给予正面反馈' if self.config.get('severity_thresholds', {}).get('include_positive_feedback', True) else ''}
 - 总结部分要简洁明了
 
 请专业、客观、建设性地进行审核。"""
     
+    def _build_review_scope_text(self) -> str:
+        """从配置构建审核范围文本"""
+        review_scope = self.config.get('review_scope', {})
+        if not review_scope:
+            return "请对代码进行全面审核。"
+        
+        scope_text = "审核范围应包括：\n\n"
+        scope_index = 1
+        
+        scope_mapping = {
+            'code_quality': '代码质量',
+            'security': '安全性',
+            'performance': '性能',
+            'go_best_practices': 'Go 最佳实践',
+            'maintainability': '可维护性'
+        }
+        
+        for scope_key, scope_name in scope_mapping.items():
+            scope_config = review_scope.get(scope_key, {})
+            if scope_config.get('enabled', True):
+                scope_text += f"{scope_index}. **{scope_name}**\n"
+                checks = scope_config.get('checks', [])
+                for check in checks:
+                    check_name = check.get('name', '')
+                    check_desc = check.get('description', '')
+                    scope_text += f"   - {check_name}：{check_desc}\n"
+                scope_text += "\n"
+                scope_index += 1
+        
+        return scope_text
+    
     def _build_review_prompt(self, files: List[str], before_sha: str, current_sha: str) -> str:
         """构建发送给 AI 的审核提示"""
         
-        prompt = "# 代码审核请求\n\n"
+        # 使用配置的用户提示词前缀
+        user_prefix = self.config.get('prompt_template', {}).get('user_prefix', '')
+        if user_prefix:
+            prompt = user_prefix + "\n\n"
+        else:
+            prompt = "# 代码审核请求\n\n"
+        
         prompt += f"请审核以下 Go 代码变更（共 {len(files)} 个文件）：\n\n"
         
         for file_path in files:
@@ -309,7 +394,8 @@ def main():
         print(f"  - {f}")
     
     # 执行审核
-    reviewer = CodeReviewer(api_key)
+    config_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'ai-review-config.yml')
+    reviewer = CodeReviewer(api_key, config_path)
     review_result = reviewer.review_code(files, args.before_sha, args.commit_sha)
     
     # 发布结果
