@@ -100,6 +100,132 @@ class CodeReviewer:
         except Exception as e:
             return f"无法读取文件: {e}"
     
+    def get_changed_functions(self, diff: str) -> List[str]:
+        """从 diff 中提取被修改的函数名"""
+        functions = []
+        lines = diff.split('\n')
+        for line in lines:
+            # 匹配 Go 函数定义: func FunctionName( 或 func (receiver) FunctionName(
+            if line.startswith('+') or line.startswith('-'):
+                line = line[1:].strip()
+                if line.startswith('func '):
+                    # 提取函数名
+                    parts = line.split('(')
+                    if len(parts) >= 2:
+                        func_part = parts[0].replace('func', '').strip()
+                        # 处理方法接收者: (r *Receiver) MethodName
+                        if func_part.startswith('('):
+                            func_part = func_part.split(')')[-1].strip()
+                        if func_part:
+                            functions.append(func_part)
+        return list(set(functions))  # 去重
+    
+    def find_function_references(self, function_name: str, exclude_file: str) -> List[Dict[str, str]]:
+        """在项目中查找函数的引用位置"""
+        references = []
+        context_config = self.config.get('context_analysis', {})
+        max_refs = context_config.get('max_related_files', 3)
+        
+        if not context_config.get('find_references', True):
+            return references
+        
+        try:
+            # 使用 grep 查找函数引用（排除 vendor 目录和当前文件）
+            result = subprocess.run(
+                ['grep', '-r', '-n', '--include=*.go', '--exclude-dir=vendor',
+                 function_name, '.'],
+                capture_output=True,
+                text=True,
+                cwd=os.getcwd()
+            )
+            
+            if result.returncode == 0:
+                lines = result.stdout.strip().split('\n')[:max_refs * 3]  # 限制结果数
+                for line in lines:
+                    if ':' in line:
+                        parts = line.split(':', 2)
+                        if len(parts) >= 3:
+                            file_path = parts[0].lstrip('./')
+                            # 排除当前修改的文件和测试文件
+                            if file_path != exclude_file and not file_path.endswith('_test.go'):
+                                line_num = parts[1]
+                                code = parts[2].strip()
+                                references.append({
+                                    'file': file_path,
+                                    'line': line_num,
+                                    'code': code
+                                })
+                                if len(references) >= max_refs:
+                                    break
+        except Exception as e:
+            print(f"⚠️  查找引用失败: {e}", file=sys.stderr)
+        
+        return references
+    
+    def get_function_context(self, file_path: str, function_name: str) -> str:
+        """获取特定函数的完整代码"""
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                lines = f.readlines()
+            
+            # 查找函数定义
+            in_function = False
+            func_lines = []
+            brace_count = 0
+            
+            for i, line in enumerate(lines):
+                # 开始匹配函数
+                if not in_function and f'func ' in line and function_name in line:
+                    in_function = True
+                    func_lines.append(f"// Line {i+1}\n")
+                
+                if in_function:
+                    func_lines.append(line)
+                    # 计算大括号来确定函数结束
+                    brace_count += line.count('{') - line.count('}')
+                    if brace_count == 0 and '{' in ''.join(func_lines):
+                        break
+            
+            return ''.join(func_lines) if func_lines else ""
+        except Exception as e:
+            return f"无法获取函数上下文: {e}"
+    
+    def analyze_imports_and_types(self, file_path: str) -> Dict[str, List[str]]:
+        """分析文件的 imports 和类型定义"""
+        analysis = {'imports': [], 'types': [], 'interfaces': []}
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+            
+            # 提取 import
+            import_block = False
+            for line in content.split('\n'):
+                line = line.strip()
+                if line.startswith('import ('):
+                    import_block = True
+                    continue
+                if import_block:
+                    if line == ')':
+                        break
+                    if line and not line.startswith('//'):
+                        analysis['imports'].append(line)
+                elif line.startswith('import '):
+                    analysis['imports'].append(line.replace('import ', ''))
+            
+            # 提取类型定义
+            for line in content.split('\n'):
+                line = line.strip()
+                if line.startswith('type ') and ' struct' in line:
+                    type_name = line.split()[1]
+                    analysis['types'].append(type_name)
+                elif line.startswith('type ') and ' interface' in line:
+                    type_name = line.split()[1]
+                    analysis['interfaces'].append(type_name)
+        except Exception as e:
+            print(f"⚠️  分析文件结构失败: {e}", file=sys.stderr)
+        
+        return analysis
+    
     def review_code(self, files: List[str], before_sha: str, current_sha: str) -> str:
         """使用 Claude AI 审核代码"""
         
@@ -213,7 +339,11 @@ class CodeReviewer:
         return scope_text
     
     def _build_review_prompt(self, files: List[str], before_sha: str, current_sha: str) -> str:
-        """构建发送给 AI 的审核提示"""
+        """构建发送给 AI 的审核提示（增强版：包含完整上下文）"""
+        
+        context_config = self.config.get('context_analysis', {})
+        context_enabled = context_config.get('enabled', True)
+        max_file_size = context_config.get('max_file_size', 10000)
         
         # 使用配置的用户提示词前缀
         user_prefix = self.config.get('prompt_template', {}).get('user_prefix', '')
@@ -222,6 +352,12 @@ class CodeReviewer:
         else:
             prompt = "# 代码审核请求\n\n"
         
+        # 添加上下文分析说明
+        if context_enabled:
+            context_instructions = context_config.get('context_instructions', '')
+            if context_instructions:
+                prompt += f"{context_instructions}\n\n"
+        
         prompt += f"请审核以下 Go 代码变更（共 {len(files)} 个文件）：\n\n"
         
         for file_path in files:
@@ -229,6 +365,18 @@ class CodeReviewer:
                 continue
             
             prompt += f"## 📄 文件: `{file_path}`\n\n"
+            
+            # 获取文件分析
+            file_analysis = self.analyze_imports_and_types(file_path)
+            if file_analysis['imports'] or file_analysis['types']:
+                prompt += "### 文件结构：\n\n"
+                if file_analysis['imports']:
+                    prompt += f"**依赖包**: {len(file_analysis['imports'])} 个\n"
+                if file_analysis['types']:
+                    prompt += f"**类型定义**: {', '.join(file_analysis['types'][:5])}\n"
+                if file_analysis['interfaces']:
+                    prompt += f"**接口定义**: {', '.join(file_analysis['interfaces'][:5])}\n"
+                prompt += "\n"
             
             # 获取 diff
             diff = self.get_file_diff(file_path, before_sha, current_sha)
@@ -240,15 +388,62 @@ class CodeReviewer:
                 if len(diff) > 5000:
                     prompt += "\n... (diff 太长，已截断)\n"
                 prompt += "\n```\n\n"
+                
+                # 提取被修改的函数
+                if context_config.get('analyze_function_context', True):
+                    changed_functions = self.get_changed_functions(diff)
+                    if changed_functions:
+                        prompt += f"### 修改的函数：{', '.join(changed_functions)}\n\n"
+                        
+                        # 查找这些函数的引用
+                        if context_config.get('find_references', True):
+                            for func_name in changed_functions[:3]:  # 限制分析的函数数
+                                refs = self.find_function_references(func_name, file_path)
+                                if refs:
+                                    prompt += f"#### 🔗 函数 `{func_name}` 的引用位置：\n\n"
+                                    for ref in refs:
+                                        prompt += f"- **{ref['file']}:{ref['line']}** - `{ref['code'][:80]}`\n"
+                                    prompt += "\n"
+                                    
+                                    # 包含部分引用文件的上下文
+                                    if context_config.get('include_related_files', True):
+                                        for ref in refs[:2]:  # 只包含前2个引用文件
+                                            ref_content = self.get_file_content(ref['file'])
+                                            if ref_content and len(ref_content) < 3000:
+                                                prompt += f"**相关文件 `{ref['file']}` 片段：**\n\n"
+                                                # 显示引用行附近的上下文（前后各5行）
+                                                try:
+                                                    ref_lines = ref_content.split('\n')
+                                                    line_num = int(ref['line']) - 1
+                                                    start = max(0, line_num - 5)
+                                                    end = min(len(ref_lines), line_num + 6)
+                                                    context_lines = ref_lines[start:end]
+                                                    prompt += "```go\n"
+                                                    for i, line in enumerate(context_lines, start=start+1):
+                                                        marker = '→' if i == line_num + 1 else ' '
+                                                        prompt += f"{marker} {i:4d} | {line}\n"
+                                                    prompt += "```\n\n"
+                                                except:
+                                                    pass
             
-            # 如果是新文件或 diff 较小，也包含当前完整内容（限制大小）
-            if before_sha == "0000000000000000000000000000000000000000" or len(diff) < 1000:
-                content = self.get_file_content(file_path)
-                if content and len(content) < 3000:
-                    prompt += "### 当前完整内容:\n\n"
+            # 包含完整文件内容（如果启用且文件不大）
+            content = self.get_file_content(file_path)
+            if context_config.get('include_full_file', True) and content:
+                if len(content) < max_file_size:
+                    prompt += "### 当前完整文件内容:\n\n"
                     prompt += "```go\n"
                     prompt += content
                     prompt += "\n```\n\n"
+                elif len(diff) < 1000:  # diff 较小但文件较大时，至少包含修改的函数
+                    if context_config.get('analyze_function_context', True):
+                        changed_functions = self.get_changed_functions(diff)
+                        for func_name in changed_functions[:2]:
+                            func_context = self.get_function_context(file_path, func_name)
+                            if func_context:
+                                prompt += f"### 函数 `{func_name}` 完整代码:\n\n"
+                                prompt += "```go\n"
+                                prompt += func_context
+                                prompt += "\n```\n\n"
             
             prompt += "---\n\n"
         

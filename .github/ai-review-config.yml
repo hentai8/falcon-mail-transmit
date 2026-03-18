@@ -16,6 +16,22 @@ output:
     warning:  "🟡 警告"
     suggestion: "🔵 建议"
 
+# 上下文分析配置
+context_analysis:
+  enabled: true                        # 是否启用完整上下文分析
+  include_full_file: true              # 包含修改文件的完整内容
+  max_file_size: 10000                 # 单个文件最大字符数（超过则只显示 diff）
+  analyze_function_context: true       # 分析修改的函数完整上下文
+  find_references: true                # 查找函数/类型的引用位置
+  include_related_files: true          # 包含相关引用文件的内容
+  max_related_files: 3                 # 最多包含的相关文件数
+  context_instructions: |
+    请特别关注：
+    1. 修改是否影响了其他使用该函数/变量的地方
+    2. 修改是否改变了函数签名、返回值或行为
+    3. 调用者是否需要相应调整
+    4. 是否存在潜在的破坏性变更
+
 # 审核范围配置
 review_scope:
   
