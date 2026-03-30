@@ -62,7 +62,6 @@ func main() {
 	e.Logger.Fatal(e.Start(":1323"))
 }
 
-// 飞书相关的生产函数
 func feishu(c echo.Context) error {
 	tos := c.FormValue("tos")
 	sub := c.FormValue("subject")
@@ -117,6 +116,12 @@ func feishu(c echo.Context) error {
 		con = rCon8.ReplaceAllString(con, "\n故障时间")
 	}
 
+	//mail := lmstfy.Mail{
+	//	Tos:     tos,
+	//	Subject: sub,
+	//	Content: con,
+	//}
+
 	// 在这里加上一个堵塞队列，全部存到redis里，每分钟从redis里取出一次，塞到消息队列里
 
 	// 生成redisKey，防止重复
@@ -154,10 +159,37 @@ func feishu(c echo.Context) error {
 		log2.Logger.Error(err.Error())
 		return c.JSON(http.StatusInternalServerError, err.Error())
 	}
+
+	//if strings.Contains(sub, "故障") {
+	//	err := lmstfy.ProduceProblemMail(mail)
+	//	if err != nil {
+	//		log2.Logger.Error("failed to produce.go create new pool account event")
+	//		return echo.NewHTTPError(http.StatusInternalServerError, "internal error")
+	//	}
+	//} else {
+	//	err := lmstfy.ProduceOKMail(mail)
+	//	if err != nil {
+	//		log2.Logger.Error("failed to produce.go create new pool account event")
+	//		return echo.NewHTTPError(http.StatusInternalServerError, "internal error")
+	//	}
+	//}
+
+	//fmt.Println(con)
+	//req, err := http.NewRequest("GET", "http://127.0.0.1:4000/sender/mail", nil)
+	//q := req.URL.Query()
+	//q.Add("tos", tos)
+	//q.Add("subject", sub)
+	//q.Add("content", con)
+	//req.URL.RawQuery = q.Encode()
+	//resp, err := http.DefaultClient.Do(req)
+	//if err != nil {
+	//	fmt.Println(err)
+	//	return err
+	//}
+	//defer resp.Body.Close()
 	return c.String(http.StatusOK, "success")
 }
 
-// 邮件相关的生产函数
 func save(c echo.Context) error {
 	tos := c.FormValue("tos")
 	sub := c.FormValue("subject")
@@ -212,7 +244,14 @@ func save(c echo.Context) error {
 		con = rCon8.ReplaceAllString(con, "\n故障时间")
 	}
 
+	//mail := lmstfy.Mail{
+	//	Tos:     tos,
+	//	Subject: sub,
+	//	Content: con,
+	//}
+
 	// 在这里加上一个堵塞队列，全部存到redis里，每分钟从redis里取出一次，塞到消息队列里
+
 	// 生成redisKey，防止重复
 	redisKey := ""
 	for {
@@ -248,6 +287,34 @@ func save(c echo.Context) error {
 		log2.Logger.Error(err.Error())
 		return c.JSON(http.StatusInternalServerError, err.Error())
 	}
+
+	//if strings.Contains(sub, "故障") {
+	//	err := lmstfy.ProduceProblemMail(mail)
+	//	if err != nil {
+	//		log2.Logger.Error("failed to produce.go create new pool account event")
+	//		return echo.NewHTTPError(http.StatusInternalServerError, "internal error")
+	//	}
+	//} else {
+	//	err := lmstfy.ProduceOKMail(mail)
+	//	if err != nil {
+	//		log2.Logger.Error("failed to produce.go create new pool account event")
+	//		return echo.NewHTTPError(http.StatusInternalServerError, "internal error")
+	//	}
+	//}
+
+	//fmt.Println(con)
+	//req, err := http.NewRequest("GET", "http://127.0.0.1:4000/sender/mail", nil)
+	//q := req.URL.Query()
+	//q.Add("tos", tos)
+	//q.Add("subject", sub)
+	//q.Add("content", con)
+	//req.URL.RawQuery = q.Encode()
+	//resp, err := http.DefaultClient.Do(req)
+	//if err != nil {
+	//	fmt.Println(err)
+	//	return err
+	//}
+	//defer resp.Body.Close()
 	return c.String(http.StatusOK, "success")
 }
 

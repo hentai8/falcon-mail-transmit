@@ -7,6 +7,7 @@ import (
 	"falcon-mail-transmit/lib/log"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	lark "github.com/larksuite/oapi-sdk-go/v3"
@@ -393,12 +394,14 @@ func sendFeishuMessage(feishu Feishu) error {
 		}
 	}`, feishu.Sub, feishu.Con)
 
-	for _, tos := range feishu.Tos {
+	tos := strings.Split(feishu.Tos, ",")
+
+	for _, to := range tos {
 		// 创建请求对象
 		req := larkim.NewCreateMessageReqBuilder().
 			ReceiveIdType("user_id").
 			Body(larkim.NewCreateMessageReqBodyBuilder().
-				ReceiveId(tos).
+				ReceiveId(to).
 				MsgType("post"). // 使用富文本格式
 				Content(content).
 				Build()).
@@ -409,17 +412,17 @@ func sendFeishuMessage(feishu Feishu) error {
 
 		// 处理错误
 		if err != nil {
-			log.Logger.Error("failed to send to ", tos, ": ", err)
+			log.Logger.Error("failed to send to ", to, ": ", err)
 
 		}
 
 		// 服务端错误处理
 		if !resp.Success() {
-			log.Logger.Error("failed to send to ", tos, ": ", resp.Msg)
+			log.Logger.Error("failed to send to ", to, ": ", resp.Msg)
 			continue
 		}
 
-		log.Logger.Info("✓ Sent to ", tos)
+		log.Logger.Info("✓ Sent to ", to)
 	}
 
 	return nil
