@@ -13,9 +13,9 @@ type Mail struct {
 }
 
 type Feishu struct {
-	Tos string `json:"tos"`
-	Sub string `json:"sub"`
-	Con string `json:"con"`
+	Tos []string `json:"tos"`
+	Sub string   `json:"sub"`
+	Con string   `json:"con"`
 }
 
 func Ping() (err error) {
